@@ -16,6 +16,7 @@ router = Router()
 class Registration(StatesGroup):
     waiting_for_name = State()
     waiting_for_name_confirm = State()
+    registered = State()
 
 
 async def reset_reg_state(message: Message, state: FSMContext):
@@ -25,6 +26,10 @@ async def reset_reg_state(message: Message, state: FSMContext):
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext):
+    cur_state = await state.get_state()
+    if cur_state == Registration.registered.state:
+        await message.answer('Браток, ты уже зареган')
+        return None
     await message.answer('Привет!')
     await reset_reg_state(message, state)
 
@@ -52,8 +57,8 @@ async def deny_name(callback: CallbackQuery, state: FSMContext):
 async def accept_name(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     name = data.get('name')
-    await state.clear()
     await callback.answer()
+    await state.set_state(Registration.registered)
     await callback.message.answer(text=f'Ну чтож, {name}, продолжим')
  
 
