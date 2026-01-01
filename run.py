@@ -4,9 +4,10 @@ from routers import router as main_router
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
+from config import settings
 
 
-bot = Bot(token='7953463053:AAGl1gcuHedcLgYAZXaANu894vmKw6haU5o')
+bot = Bot(token=settings.bot_token)
 dp = Dispatcher()
 
 dp.include_router(main_router)
