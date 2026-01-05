@@ -1,0 +1,68 @@
+1. Establishing Connectivity - the Engine
+The object which is used for establishing connection with the database server is called the engine.
+Engine is created by using function create_engine(db_url) from sqlalchemy package.
+Engine object besides other properties acts like a connection pool.
+
+
+2. Working with Transactions and the DBAPI
+As often mentioned throught each part of the tutorial, there are two ways of operating sqlalchemy in general: the core, and the ORM way.
+While core functionality is mostly outside of my spectrum, let's focus on ORM tricks.
+The main object which provides a way of executing, for example, plain sql statements is named Session. Usually, the process of working with Session object looks like this:
+
+with Session(engine) as session:
+    session.execute(statement=stmt)
+    session.commit()
+
+It should be noted that core-way counterpart of Session, Connection class, is very similar to that of Session.
+In most cases, Session object refers to Connection under the hood.
+The important thing is Session doesn't hold on to single Connection object, while executing several SQL statements, it gets a new one from connection pool each time.
+
+Use 00_session.py for reference.
+
+
+3. Working with Database Metadata
+At first, let's talk about the Core approach for tables creation process.
+
+Each declared table is stored in MetaData object in a dictionary-like fashion. MetaData is somewhat a parent container for tables, it has several methods allowing to perform operations like CREATE or DROP on all the tables it contains. Those two specifically are:
+
+metadata_obj = MetaData()
+metadata_obj.create_all()
+metadata_obj.drop_all()
+
+MetaData object is used directly like this only in the Core approach.
+Once MetaData object is created, we can define table Classes, inside which it is nessessary to reference MetaData object. 
+The main things that should be pointed out is that the constrains are nothing but additional parameters for the Column class.
+
+For reference use 01_table.py
+
+Than, the ORM approach does the same things in a different way.
+
+Actually, just take a look at 02_table_orm.py
+
+
+Существует несколько способов из уже созданной в базе данных таблицы получить ORM mapped класс, с помощью приёма называемого reflection.
+Простейший способ в рамках core подхода, сгенерировать объект метаданных и на его основе Table:
+
+engine = create_engine(conn_string)
+metadata_obj = MetaData()
+user_table = Table('user', metadata_obj, autoload_with=engine)
+
+user_table в итоге вернёт такой же объект как если бы мы создавали таблицу вручную с помощью классов Table, Column и т.д.
+
+
+04. Working with data
+Короче буду выносить сюда ключевые заметки.
+Для создания INSERT statement используется функция insert из пакета sqlalchemy, есть два варианта использования, сразу с указанием параметров:
+stmt = insert(user_table).values(name='фел габибов', age=28)
+
+И второй вариант, без указания параметров в values, вместо этого передаём их в session/connection.execute:
+
+with Session(engine) as session:
+    session.execute(insert(user_table), 
+    [
+        {'name': 'бабинский феликс', age: 28},
+        {'name': 'бабинс', age: 28}
+    ])
+    session.commit()
+
+
