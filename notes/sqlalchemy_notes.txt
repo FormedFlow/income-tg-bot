@@ -5,7 +5,7 @@ Engine object besides other properties acts like a connection pool.
 
 
 2. Working with Transactions and the DBAPI
-As often mentioned throught each part of the tutorial, there are two ways of operating sqlalchemy in general: the core, and the ORM way.
+As often mentioned throughout each part of the tutorial, there are two ways of operating sqlalchemy in general: the core, and the ORM way.
 While core functionality is mostly outside of my spectrum, let's focus on ORM tricks.
 The main object which provides a way of executing, for example, plain sql statements is named Session. Usually, the process of working with Session object looks like this:
 
@@ -66,3 +66,61 @@ with Session(engine) as session:
     session.commit()
 
 
+Можно использовать вложенный запрос, который соответствует в SQL такому выражению
+INSERT INTO address (user_id, email_address)
+SELECT id, name + '@gmail.com'
+FROM address;
+
+В sqlalchemy будет выглядеть так:
+select_stmt = select(user_table.c.id, user_table.c.name + '@gmail.com')
+insert_stmt = insert(address_table).from_select(
+    ["user_id", "email_address"],
+    select_stmt
+)
+
+Ну и далее session.execute(insert_stmt) и т.д.
+
+Чтобы сделать SELECT id AS user_id, в SQLAlchemy используется метод .label('user_id'). Естественно, в результирующих строках потом можно обращаться к атрибуту .user_id
+
+Думаю, стоит запомнить метод .returning соответствующий оператору RETURNING в SQL, который поддерживается не во всех диалектах. Позволяет при вставке вернуть заданные поля последней вставленной записи.
+insert_stmt.returning(address_table.c.id, address_table.c.email_address)
+
+Когда используем select с ORM-mapped классами, в виде select(User), в результате получаем строки, содержащие один элемент - экземпляр класса User. Чтобы сразу получить этот экземпляр, не в виде одноэлементного кортежа, а в виде экземпляра класса нужно использовать
+session.scalars(select(User))
+
+По аналогии с тем, как обычный текст может быть вставлен в SELECT в SQL, того же можно добиться в SQLAlchemy, используя text() из пакета SQLAlchemy:
+select_stmt = select(text('Габибов Феликс'), user_table.c.name)
+
+Существует так же аналогичный метод .literal_column("some text") к которому потом можно применить .label() и обращаться как к отдельной колонке в result.
+
+
+В .where() доступны операторы or_() и and_(). В случае где нужен and можно также просто перечислить условия через запятую. Не думаю, что это прямо важно, но SQLAchemy в SQL инструкциях, в частности в WHERE не ставит скобки, там где это не нужно, полагаясь на приоритет операторов.
+
+
+Для простых проверок на равенство значений в колонках литеральным значениями существует "популярный" метод .filter_by(). Вроде как применяется к самой дальней слева таблице во FROM, либо к последней присоединенной JOINом. Использование выглядит так:
+print(select(User).filter_by(name="феликс", fullname="феликс габибов"))
+РАБОТАЕТ ТОЛЬКО ДЛЯ ORM сущностей. Именованные аргументы маппятся на имена атрибутов модели либо на сами имена колонок таблицы (согласно документации)
+
+
+Насчёт джойнов, есть два метода - .join_from() и обычный .join()
+.join_from() позволяет указать обе стороны (таблицы) которые джойним, .join() только правую, левая подхватывается сама из колонок селекта.
+В обоих случаях условие ON так же генерируется само на основе внешних ключей.
+
+
+Если по каким-то причинам нас не устраивает автоматически подхваченное FROM из колонок в .select(), можно вручную использовать 
+.select_from().
+А, ну и одна из таких возможных причин - недостаточная информация в .select(), например при использовании функции COUNT(*):
+
+from sqlalchemy import func
+print(select(func.count("*")).select_from(user_table))
+
+
+
+Если обычный .join() или .join_from() по дефолту - это обычный INNER JOIN, то есть так же возможность сделать LEFT OUTER JOIN и FULL OUTER JOIN. Делается это с помощью ключевых аргументов isouter и full. Да, флаг isouter означает LEFT OUTER JOIN, вот такая замечательная семантика.
+В SQLAlchemy нет RIGHT JOIN, при необходимости нужно просто менять таблицы местами.
+
+
+.order_by() доступно как в Core, так и в ORM варианте:
+select(user_table).order_by(user_table.c.name.asc())
+select(User).order_by(User.name.desc())
+Доступны .asc() .desc() тоже в обоих вариантах для ColumnElement.

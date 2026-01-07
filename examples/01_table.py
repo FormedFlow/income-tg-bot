@@ -1,7 +1,6 @@
 from sqlalchemy import Table, Column, Integer, String, MetaData
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sync_config import settings
 
 
 metadata_obj = MetaData()

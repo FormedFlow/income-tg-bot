@@ -26,4 +26,8 @@ with Session(engine) as session:
             {'name': 'бабинс дрочёный', 'age': 28}
         ]
     )
-    session.commit()
+    # session.commit()
+
+
+stmt_3 = insert(user_table).values()
+print(stmt_3.compile(engine))
