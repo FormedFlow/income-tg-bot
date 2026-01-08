@@ -5,3 +5,5 @@ fetch - в it контексте - получить, извлечь. go and get 
 inferred - выведен. deduced from evidence or reasoning
 invoke - запустить, вызвать. cause a program to execute
 resolve - разрешается, решается. finding a solution, answer
+succint - краткий, лаконичный
+implied - подразумеваемый. not directly stated but understood from the context

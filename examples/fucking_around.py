@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, insert, select, text
+from sqlalchemy import create_engine, insert, select, text, func
 from sqlalchemy import String, ForeignKey, MetaData, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.orm import Session
@@ -105,4 +105,15 @@ with Session(engine) as session:
     select_stmt_4 = select(user_table.c.fullname).where(user_table.c.name == 'мужик')
     result_4 = session.execute(select_stmt_4)
     for row in result_4:
+        print(row)
+
+    count = func.count(Address.id)
+    result = session.execute(
+        select(User.fullname, count.label('addresses'))
+        .join(Address)
+        .group_by(User.fullname)
+        .having(count > 0)
+    )
+    print('###'*5)
+    for row in result:
         print(row)

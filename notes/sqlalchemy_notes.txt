@@ -35,13 +35,13 @@ The main things that should be pointed out is that the constrains are nothing bu
 
 For reference use 01_table.py
 
-Than, the ORM approach does the same things in a different way.
+Then, the ORM approach does the same things in a different way.
 
 Actually, just take a look at 02_table_orm.py
 
 
 Существует несколько способов из уже созданной в базе данных таблицы получить ORM mapped класс, с помощью приёма называемого reflection.
-Простейший способ в рамках core подхода, сгенерировать объект метаданных и на его основе Table:
+Простейший способ в рамках core подхода сгенерировать объект метаданных и на его основе Table:
 
 engine = create_engine(conn_string)
 metadata_obj = MetaData()
@@ -91,20 +91,21 @@ session.scalars(select(User))
 По аналогии с тем, как обычный текст может быть вставлен в SELECT в SQL, того же можно добиться в SQLAlchemy, используя text() из пакета SQLAlchemy:
 select_stmt = select(text('Габибов Феликс'), user_table.c.name)
 
-Существует так же аналогичный метод .literal_column("some text") к которому потом можно применить .label() и обращаться как к отдельной колонке в result.
+Существует так же аналогичный метод .literal_column("'some text'") к которому потом можно применить .label() и обращаться как к отдельной колонке в result.
 
 
 В .where() доступны операторы or_() и and_(). В случае где нужен and можно также просто перечислить условия через запятую. Не думаю, что это прямо важно, но SQLAchemy в SQL инструкциях, в частности в WHERE не ставит скобки, там где это не нужно, полагаясь на приоритет операторов.
 
 
-Для простых проверок на равенство значений в колонках литеральным значениями существует "популярный" метод .filter_by(). Вроде как применяется к самой дальней слева таблице во FROM, либо к последней присоединенной JOINом. Использование выглядит так:
+Для простых проверок на равенство значений в колонках литеральным значениям существует "популярный" метод .filter_by(). Вроде как применяется к самой дальней слева таблице во FROM, либо к последней присоединенной JOINом. Использование выглядит так:
 print(select(User).filter_by(name="феликс", fullname="феликс габибов"))
 РАБОТАЕТ ТОЛЬКО ДЛЯ ORM сущностей. Именованные аргументы маппятся на имена атрибутов модели либо на сами имена колонок таблицы (согласно документации)
 
 
 Насчёт джойнов, есть два метода - .join_from() и обычный .join()
 .join_from() позволяет указать обе стороны (таблицы) которые джойним, .join() только правую, левая подхватывается сама из колонок селекта.
-В обоих случаях условие ON так же генерируется само на основе внешних ключей.
+В обоих случаях условие ON так же генерируется само на основе внешних ключей, но может при необходимости и быть указано явно, с помощью дополнительного аргумента в .join() или .join_from() с использованием синтаксиса, аналогичному используемому в .where().
+select(user_table.c.fullname).join(address_table, address_table.c.user_id == user_table.c.id)
 
 
 Если по каким-то причинам нас не устраивает автоматически подхваченное FROM из колонок в .select(), можно вручную использовать 
@@ -124,3 +125,145 @@ print(select(func.count("*")).select_from(user_table))
 select(user_table).order_by(user_table.c.name.asc())
 select(User).order_by(User.name.desc())
 Доступны .asc() .desc() тоже в обоих вариантах для ColumnElement.
+
+
+.group_by() и .having() доступны, по всей видимости как для Core подхода, так и для ORM-based. Всё стандартно.
+В пакете sqlalchemy есть модуль func предоставляющий доступ к различным SQL функциям, в частности к аггрегирующей функции COUNT()
+Пример с .group_by()
+
+with engine.connect() as conn:
+    result = conn.execute(
+        select(User.name, func.count(Address.id).label("count"))
+        .join(Address)
+        .group_by(User.name)
+        .having(func.count(Address.id) > 1)
+    )
+    print(result.all())
+
+
+В .group_by() и .order_by() можно передавать имена колонок или алиасы с целью не вычислять уже готовое выражение заново.
+В таком случае в .group_by() или/и .order_by() передаётся в текстовом виде название колонки или алиас, но он не подставляется "как есть" в итоговое выражение, поскольку это бы создавало риск SQL-инъекции, а сперва вычисляется значение в .select() и затем с ним сопоставляется текст из .group_by()/.order_by(). В случае ненахождения в селекте такого названия поднимается ошибка. 
+В .order_by() можно передавать аргумент
+Пример использования:
+
+from sqlalchemy import func, desc
+stmt = (
+    select(Address.user_id, func.count(Address.id).label("num_addresses"))
+    .group_by("user_id")
+    .order_by("user_id", desc("num_addresses"))
+)
+print(stmt)
+
+
+Внезапно выяснилось что алиасы в рамках документации SQLAlchemy это немного другое, а именно метод Table.alias(), используемый, в частности для того, чтобы при использовании в разделе запроса FROM одинаковых таблиц несколько раз, мы бы могли сослаться на их алиасы:
+
+user_alias_1 = user_table.alias()
+user_alias_2 = user_table.alias()
+print(
+    select(user_alias_1.c.name, user_alias_2.c.name).join_from(
+        user_alias_1, user_alias_2, user_alias_1.c.id > user_alias_2.c.id
+    )
+)
+
+Для ORM сущностей есть свой вариант создания алиаса - функция aliased(). Под капотом создаёт объект Alias() для связанного объекта Table()
+Пример (не очень понял к слову):
+
+from sqlalchemy.orm import aliased
+address_alias_1 = aliased(Address)
+address_alias_2 = aliased(Address)
+print(
+    select(User)
+    .join_from(User, address_alias_1)
+    .where(address_alias_1.email_address == "patrick@aol.com")
+    .join_from(User, address_alias_2)
+    .where(address_alias_2.email_address == "patrick@gmail.com")
+)
+
+
+.subquery() и .cte() - методы с помощью которых можно создать подзапрос или Common Table Expression.
+subq = (
+    select(func.count(address_table.c.id).label("count"), address_table.c.user_id)
+    .group_by(address_table.c.user_id)
+    .subquery()
+)
+
+И потом на него можно ссылаться как на subq, к его колонкам subq.c.count и т.д. При использовании обоих методов, подзапросы на уровне SQL получают "анонимные" алиасы:
+
+WITH anon_1 AS
+(SELECT count(address.id) AS count, address.user_id AS user_id
+FROM address GROUP BY address.user_id)
+ SELECT user_account.name, user_account.fullname, anon_1.count
+FROM user_account JOIN anon_1 ON user_account.id = anon_1.user_id
+
+Можно изменять эти алиасы, передавая необходимое название в качестве первого аргумента в методы .subquery() и .cte()
+
+
+
+При работе с подзапросами в рамках ORM подхода требуется использовать aliased(Class, subquery).
+Подзапросы, составленные с помощью .subquery() и .cte() можно промаппить на ORM класс, на базе которого эти запросы построены, для того чтобы можно в последствии было бы их использовать уже в обобщённом запросе вместе с другими ORM классами:
+
+subq = select(Address).where(~Address.email_address.like("%@aol.com")).subquery()
+address_subq = aliased(Address, subq)
+stmt = (
+    select(User, address_subq)
+    .join_from(User, address_subq)
+    .order_by(User.id, address_subq.id)
+)
+with Session(engine) as session:
+    for user, address in session.execute(stmt):
+        print(f"{user} {address}")
+
+
+
+
+Дальше .scalar_subquery(). Скалярный подзапрос и correlated subquery. Скалярный запрос - запрос, возвращающий 0 или 1 строку с ровно одним полем, для использования в .select() как колонки, либо (наверное) в where().
+C коррелирующим запросом происходит некая магия, если он ссылается сам по себе на две таблицы, а потом его запихивают внутрь запроса, где на одну уже ссылаются, то в SQL инструкции эта общая таблица опускается во вложенном запросе, поскольку она есть снаружи.
+Crazy, но это работает в SQL.
+Пример:
+subq = (
+    select(func.count(address_table.c.id))
+    .where(user_table.c.id == address_table.c.user_id)
+    .scalar_subquery()
+)
+print(subq)
+
+(SELECT count(address.id) AS count_1
+FROM address, user_account
+WHERE user_account.id = address.user_id)
+
+При использовании в другом запросе:
+stmt = select(user_table.c.name, subq.label("address_count"))
+print(stmt)
+
+SELECT user_account.name, (SELECT count(address.id) AS count_1
+FROM address
+WHERE user_account.id = address.user_id) AS address_count
+FROM user_account
+
+Упоминание таблицы user_account во вложенном запросе исчезло!
+
+
+
+В сложных случаях с джойнами(?), когда непонятно с какой таблицей запрос коррелировать, нужно указать это самому, иначе получим ошибку.
+Короче указывать таблицу, которая будет вовне нужно с помощью .correlate(Model).
+
+
+
+
+ЗДЕСЬ Я ПРЕРЫВАЮ ЧТЕНИЕ UNIFIED TUTORIAL. СЧИТАЮ НЕРЕЛЕВАНТНЫМ ПОГЛОЩАТЬ ВСЮ ЭТУ ИНФОРМАЦИЮ, ПОКА ХВАТИТ И БОЛЬШЕЙ ЧАСТИ.
+ЛАДНО, ВОЗОБНОВЛЯЮ ЧТЕНИЕ, но лишь тех участков которые считаю нужными.
+
+
+Дальше о функциях. Многие SQL функции доступны из фабрики функций sqlalchemy.func.
+SQLAlchemy автоматически рэндерит распространенные функции вроде NOW() в соответствующем текущему диалекту виде.
+Вот так можно посмотреть скомплированные инструкции для определенного диалекта:
+from sqlalchemy.dialects import postgresql
+print(select(func.now()).compile(dialect=postgresql.dialect()))
+from sqlalchemy.dialects import oracle
+print(select(func.now()).compile(dialect=oracle.dialect()))
+
+Любое название, указанное в пространстве имён func.namespace автоматически преобразуется в SQL-функцию с соответствующим названием.
+print(select(func.some_crazy_function(user_table.c.name, 17)))
+
+SELECT some_crazy_function(user_account.name, :some_crazy_function_2) AS some_crazy_function_1
+FROM user_account

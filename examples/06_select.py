@@ -1,7 +1,7 @@
 from fucking_around import User, Address, address_table, user_table
 from config import test_settings
 from sqlalchemy import create_engine, select, text, literal_column, label
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func
 
 
@@ -42,3 +42,35 @@ with Session(engine) as session:
 
     stmt_7 = select(func.count("*")).select_from(user_table)
     print(session.scalars(stmt_7).first())
+
+    print('#########'*4)
+
+    user_alias_1 = user_table.alias()
+    user_alias_2 = user_table.alias()
+
+    result = session.execute(
+        select(user_alias_1.c.name, user_alias_2.c.name)
+        .join_from(user_alias_1, user_alias_2, user_alias_1.c.id > user_alias_2.c.id)
+    )
+    for row in result:
+        print(row)
+
+
+    subq = select(Address.user_id, Address.email_address).where(Address.user_id == 2).subquery()
+    result = session.execute(
+        select(User.name, User.fullname, subq.c.email_address)
+        .join_from(User, subq)
+    )
+    print(result.first())
+
+
+    subq = select(Address).subquery()
+    address_subq = aliased(Address, subq)
+
+    result = session.execute(
+        select(User.fullname, address_subq)
+        .join_from(User, address_subq)
+    )
+    print('###########' * 4)
+    for row in result:
+        print(row)
