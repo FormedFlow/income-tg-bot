@@ -74,3 +74,5 @@ with Session(engine) as session:
     print('###########' * 4)
     for row in result:
         print(row)
+
+

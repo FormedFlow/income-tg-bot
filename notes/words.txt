@@ -7,3 +7,6 @@ invoke - запустить, вызвать. cause a program to execute
 resolve - разрешается, решается. finding a solution, answer
 succint - краткий, лаконичный
 implied - подразумеваемый. not directly stated but understood from the context
+intricate - сложный, запутанный. having many small details
+memoization - caching the results of expensive or frequent database queries to avoid re-executing them
+persist - continue to exist without interruption

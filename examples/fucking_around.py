@@ -47,73 +47,80 @@ address_table = Table('address', metadata_obj, autoload_with=engine)
 
 insert_stmt = insert(user_table)
 
-with Session(engine) as session:
-    session.execute(
-        insert_stmt,
-        [
-            {'name': 'фел', 'fullname': 'фел бабинский'},
-            {'name': 'бабинс', 'fullname': 'фел бабиныч'}
-        ])
-    # session.commit()
+
+def main():
+    with Session(engine) as session:
+        session.execute(
+            insert_stmt,
+            [
+                {'name': 'фел', 'fullname': 'фел бабинский'},
+                {'name': 'бабинс', 'fullname': 'фел бабиныч'}
+            ])
+        # session.commit()
 
 
-select_stmt = select(user_table.c.id, user_table.c.name + '@gmail.com')
-insert_stmt = insert(address_table).from_select(
-    ["user_id", "email_address"],
-    select_stmt
-)
-print(insert_stmt)
-
-with Session(engine) as session:
-    session.execute(insert_stmt)
-    # session.commit()
-
-
-select_stmt_2 = select(user_table.c['name', 'fullname'])
-with Session(engine) as session:
-    for row in session.execute(select_stmt_2):
-        print(row)
-
-select_stmt_3 = select(User).where(User.name == 'бабинс')
-with Session(engine) as session:
-    result = session.execute(select_stmt_3)
-    for model in result:
-        print(model)
-    result = session.scalars(select_stmt_3).first()
-    print(result)
-
-
-with Session(engine) as session:
-    plain_sql = text('SELECT * FROM user_account WHERE name = :name')
-    result = session.execute(plain_sql, {'name': 'бабинс'})
-    print(result.all())
-
-
-with Session(engine) as session:
-    insert_stmt_2 = insert(user_table)
-    result = session.execute(
-        insert_stmt_2,
-        [
-            {'name': 'феликс', 'fullname': 'феликс габибов'},
-            {'name': 'мужик', 'fullname': 'мужик с портфелем'}
-        ]
+    select_stmt = select(user_table.c.id, user_table.c.name + '@gmail.com')
+    insert_stmt = insert(address_table).from_select(
+        ["user_id", "email_address"],
+        select_stmt
     )
-    # session.commit()
+    print(insert_stmt)
+
+    with Session(engine) as session:
+        session.execute(insert_stmt)
+        # session.commit()
 
 
-with Session(engine) as session:
-    select_stmt_4 = select(user_table.c.fullname).where(user_table.c.name == 'мужик')
-    result_4 = session.execute(select_stmt_4)
-    for row in result_4:
-        print(row)
+    select_stmt_2 = select(user_table.c['name', 'fullname'])
+    with Session(engine) as session:
+        for row in session.execute(select_stmt_2):
+            print(row)
 
-    count = func.count(Address.id)
-    result = session.execute(
-        select(User.fullname, count.label('addresses'))
-        .join(Address)
-        .group_by(User.fullname)
-        .having(count > 0)
-    )
-    print('###'*5)
-    for row in result:
-        print(row)
+    select_stmt_3 = select(User).where(User.name == 'бабинс')
+    with Session(engine) as session:
+        result = session.execute(select_stmt_3)
+        for model in result:
+            print(model)
+        result = session.scalars(select_stmt_3).first()
+        print(result)
+
+
+    with Session(engine) as session:
+        plain_sql = text('SELECT * FROM user_account WHERE name = :name')
+        result = session.execute(plain_sql, {'name': 'бабинс'})
+        print(result.all())
+
+
+    with Session(engine) as session:
+        insert_stmt_2 = insert(user_table)
+        result = session.execute(
+            insert_stmt_2,
+            [
+                {'name': 'феликс', 'fullname': 'феликс габибов'},
+                {'name': 'мужик', 'fullname': 'мужик с портфелем'}
+            ]
+        )
+        # session.commit()
+
+
+    with Session(engine) as session:
+        select_stmt_4 = select(user_table.c.fullname).where(user_table.c.name == 'мужик')
+        result_4 = session.execute(select_stmt_4)
+        for row in result_4:
+            print(row)
+
+        count = func.count(Address.id)
+        result = session.execute(
+            select(User.fullname, count.label('addresses'))
+            .join(Address)
+            .group_by(User.fullname)
+            .having(count > 0)
+        )
+        print('###'*5)
+        for row in result:
+            print(row)
+
+
+    
+if __name__ == '__main__':
+    main()

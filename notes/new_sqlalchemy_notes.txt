@@ -1,0 +1,210 @@
+UPDATE
+Может использоваться с ORM классами и с Table, в самом простом случае, обновление одной таблицы выглядит как
+from sqlalchemy import update
+stmt = (
+    update(user_table)
+    .where(user_table.c.name == "patrick")
+    .values(fullname="Patrick the Star")
+)
+print(stmt)
+
+
+Для обновления нескольких строк в стиле executemany нужно использовать функцию sqlalchemy.bindparam()
+from sqlalchemy import bindparam
+stmt = (
+    update(user_table)
+    .where(user_table.c.name == bindparam("oldname"))
+    .values(name=bindparam("newname"))
+)
+with engine.begin() as conn:
+    conn.execute(
+        stmt,
+        [
+            {"oldname": "jack", "newname": "ed"},
+            {"oldname": "wendy", "newname": "mary"},
+            {"oldname": "jim", "newname": "jake"},
+        ],
+    )
+
+С её помощью помечаются так скажем плэйсхолдеры куда подставляются значения.
+
+
+
+
+SQLAchemy позволяет создавать поддерживаемые многими бд бэкэндами запросы имеющие синтаксис UPDATE .. FROM:
+update_stmt = (
+    update(user_table)
+    .where(user_table.c.id == address_table.c.user_id)
+    .where(address_table.c.email_address == "patrick@aol.com")
+    .values(fullname="Pat")
+)
+print(update_stmt)
+
+UPDATE user_account SET fullname=:fullname FROM address
+WHERE user_account.id = address.user_id AND address.email_address = :email_address_1
+
+
+
+Помимо executemany-style запроса с использованием bindparam() можно также использовать класс sqlalchemy.Values.
+Я так понял это просто контейнер, для которого сразу указываются разные параметры, а потом они используются в .where() и .values()
+from sqlalchemy import Values
+values = Values(
+    user_table.c.id,
+    user_table.c.name,
+    name="my_values",
+).data([(1, "new_name"), (2, "another_name"), ("3", "name_name")])
+update_stmt = (
+    user_table.update().values(name=values.c.name).where(user_table.c.id == values.c.id)
+)
+from sqlalchemy.dialects import postgresql
+print(update_stmt.compile(dialect=postgresql.dialect()))
+
+UPDATE user_account
+SET name=my_values.name
+FROM (VALUES (%(param_1)s, %(param_2)s), (%(param_3)s, %(param_4)s), (%(param_5)s, %(param_6)s)) AS my_values (id, name)
+WHERE user_account.id = my_values.id
+
+
+
+Ещё одна эксклюзивная (вроде) фича mySQL - порядок обновляемых полей в строках имеет значение. Т.е. можно обновить одно поле, и в обновлении этой же строки сослаться на уже обновленное значение.
+update_stmt = update(some_table).ordered_values(
+    (some_table.c.y, 20), (some_table.c.x, some_table.c.y + 10)
+)
+print(update_stmt)
+
+UPDATE some_table SET y=:y, x=(some_table.y + :y_1)
+
+
+
+
+DELETE
+Тоже поддерживает Table и ORM классы.
+Базовый синтаксис
+from sqlalchemy import delete
+stmt = delete(user_table).where(user_table.c.name == "patrick")
+print(stmt)
+
+Поддерживает коррелирующие подзапросы и синтаксис с использованием нескольких таблиц DELETE FROM .. USING (mySQL specific)
+delete_stmt = (
+    delete(user_table)
+    .where(user_table.c.id == address_table.c.user_id)
+    .where(address_table.c.email_address == "patrick@aol.com")
+)
+from sqlalchemy.dialects import mysql
+print(delete_stmt.compile(dialect=mysql.dialect()))
+
+DELETE FROM user_account USING user_account, address
+WHERE user_account.id = address.user_id AND address.email_address = %s
+
+
+
+update() и delete() при выполнении запросов через объект Connection хранят кол-во отобранных строк в CursorResult.rowcount
+with engine.begin() as conn:
+    result = conn.execute(
+        update(user_table)
+        .values(fullname="Patrick McStar")
+        .where(user_table.c.name == "patrick")
+    )
+    print(result.rowcount)
+
+
+Атрибут .rowcount может быть недоступен при использовании в запросе RETURNING или если это executemany запрос, это зависит от конкретного драйвера СУБД. В случае если не удалось определить .rowcount для запроса, этот атрибут вернёт -1. Некоторые драйвера, в частности, для нереляционных баз данных, могут вообще не поддерживать атрибут .rowcount.
+
+
+update() и delete() поддерживают метод .returning(), возвращающий указанные поля всех строк, которые были отобраны условием WHERE. Поддерживается не всеми бэкэндами. Возвращает список строк с указанными полями.
+update_stmt = (
+    update(user_table)
+    .where(user_table.c.name == "patrick")
+    .values(fullname="Patrick the Star")
+    .returning(user_table.c.id, user_table.c.name)
+)
+
+
+UPDATE user_account SET fullname=:fullname
+WHERE user_account.name = :name_1
+RETURNING user_account.id, user_account.name
+
+
+print(update_stmt)
+delete_stmt = (
+    delete(user_table)
+    .where(user_table.c.name == "patrick")
+    .returning(user_table.c.id, user_table.c.name)
+)
+print(delete_stmt)
+
+
+DELETE FROM user_account
+WHERE user_account.name = :name_1
+RETURNING user_account.id, user_account.name
+
+
+
+
+Data manipulation with ORM
+Для того чтобы с помощью ORM осуществить вставку записей в таблицу, необходимо сперва добавить их в Session с помощью session.add(), затем после добавления всех необходимых записей либо использовать session.flush() вручную, либо просто session.commit() который автоматически делает .flush().
+Созданные, но ещё не добавленные в сессию объекты ORM классов висят с состоянии transient - не ассоциированные с сессией.
+Поскольку при флашинге объектов, сессия должна знать их первичный ключ, вставка множества записей обычно разбивается на одиночные INSERT запросы вместо executemany-стиля. Похоже, что какие-то драйверы БД, как минимум psycopg2, способны обходить это ограничение, при этом давая всё тот же ожидаемый результат.
+
+
+
+Identity map - механизм сессии, обечпечивающий одновременное существование лишь одного python-объекта для каждой строки из БД в рамках одной сессии. Позволяет избежать проблем рассинхронизации, неизбежных для случая когда у нас есть несколько разных объектов представляющих одну и ту же запись из таблицы:
+
+obj1 = Session.get(User, 5) # некий User(name='бабинский')
+obj2 = Session.get(User, 5) # снова бабинский но другой объект
+obj1.name = 'nobody'
+obj1.name == obj2.name # False
+
+
+UPDATE
+Основной способ обновления строк в рамках ORM подхода основан на автоматической генерации SQL инструкций, привязанных к первичному ключу строки, при изменении атрибутов ORM объекта.
+Рассмотрим следующий пример:
+sandy = session.execute(select(User).filter_by(name="sandy")).scalar_one()
+
+sandy - прокси-объект для строки базы данных в рамках данной транзакции, имеет первичный ключ = 2.
+sandy
+User(id=2, name='sandy', fullname='Sandy Cheeks')
+
+При изменении атрибута этого объекта
+sandy.fullname = "Sandy Squirrel"
+
+объект появится в коллекции .dirty сессии, обозначая что объект "грязный"
+sandy in session.dirty
+True
+
+
+Теперь если сделать запрос
+sandy_fullname = session.execute(select(User.fullname).where(User.id == 2)).scalar_one()
+print(sandy_fullname)
+
+
+Сперва благодаря autoflush произойдёт очистка буфера сессии (и выполнение соответствующих SQL инструкций для pending объектов)
+UPDATE user_account SET fullname=? WHERE user_account.id = ?
+[...] ('Sandy Squirrel', 2)
+SELECT user_account.fullname
+FROM user_account
+WHERE user_account.id = ?
+[...] (2,)
+
+
+Объект sandy больше не находится в коллекции .dirty
+sandy in session.dirty
+False
+
+
+Но на всякий случай снова отмечу, что без явного session.commit() обновленные данные не возымеют никакого эффекта на базу данных.
+
+
+
+
+Bulk / Multi Row INSERT, upsert, UPDATE and DELETE
+Для вставки, обновления или удаления большого кол-ва объектов средствами ORM существует специальный подход, называемый ORM-Enabled INSERT, UPDATE, DELETE, про который можно почитать отдельно в разделе ORM quierying guide.
+
+
+
+Rollback сессии
+session.rollback() откатывает текущую транзакцию и экспайрит атрибуты объектов с которыми мы работали в рамках сессии. Повторное обращение к таким атрибутам, как и после коммита, так и после роллбэка, приведёт к созданию нового SQL запроса, который получит из БД актуальные данные. Удаленные объекты так же возвращают своё состояние:
+patrick in session
+True
+
+

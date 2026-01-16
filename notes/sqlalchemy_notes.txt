@@ -124,7 +124,7 @@ print(select(func.count("*")).select_from(user_table))
 .order_by() доступно как в Core, так и в ORM варианте:
 select(user_table).order_by(user_table.c.name.asc())
 select(User).order_by(User.name.desc())
-Доступны .asc() .desc() тоже в обоих вариантах для ColumnElement.
+Доступны .asc() .desc() тоже в обоих вариантах для ColumnElement, в случае если используем строковый вариант названия колонки или label - используем функции asc() и desc() из пакета sqlalchemy.
 
 
 .group_by() и .having() доступны, по всей видимости как для Core подхода, так и для ORM-based. Всё стандартно.
@@ -267,3 +267,88 @@ print(select(func.some_crazy_function(user_table.c.name, 17)))
 
 SELECT some_crazy_function(user_account.name, :some_crazy_function_2) AS some_crazy_function_1
 FROM user_account
+
+Дальше в документации говорится о том что SQL функции возвращают некие данные, если в python коде мы говорим о return types, то возвращаемые SQL выражениями типы называют SQL return types
+
+# pre-configured SQL function (only a few dozen of these)
+func.now().type # DateTime()
+
+# arbitrary SQL function (all other SQL functions)
+func.run_some_calculation().type # NullType()
+
+Возвращаемый тип для функций можно указывать явно с помощью именованного аргумента type_=, которому передаётся дочерний класс TypeEngine либо экземлпяр класса.
+from sqlalchemy import JSON
+function_expr = func.json_object('{a, 1, b, "def", c, 3.5}', type_=JSON)
+
+
+
+
+Для приведения типов, или просто явного указания необходимого типа данных в неоднозначных ситуациях, используется функция cast(), транслирующуяся в соответствующий оператор CAST в SQL.
+from sqlalchemy import cast
+stmt = select(cast(user_table.c.id, String))
+with engine.connect() as conn:
+    result = conn.execute(stmt)
+    result.all()
+
+BEGIN (implicit)
+SELECT CAST(user_account.id AS VARCHAR) AS id
+FROM user_account
+[...] ()
+
+В объекте Result мы тоже получаем соотвтествующий python тип.
+
+
+
+И есть аналог cast() - type_coerce(), который помечает тип данных лишь на python-стороне, т.е. не рэндерит оператор CAST в SQL.
+Сперва не особо понял зачем это, но пример работы с JSON внёс ясность. 
+import json
+from sqlalchemy import JSON
+from sqlalchemy import type_coerce
+from sqlalchemy.dialects import mysql
+s = select(type_coerce({"some_key": {"foo": "bar"}}, JSON)["some_key"])
+print(s.compile(dialect=mysql.dialect()))
+
+SELECT JSON_EXTRACT(%s, %s) AS anon_1
+
+Здесь, благодаря тому, что мы явно указали тип данных выражения с помощью type_coerce() была использована необходимая SQL функция JSON_EXTRACT().
+
+#######################################################
+
+UPDATE и DELETE
+Если функция insert() реализующая вставку строк в таблицу может быть использована только в рамках Core-подхода, т.е. с использованием Table, то update() и delete(), несмотря на то, что для ORM варианта есть специальный более удобный синтаксис, могут быть использованы как для Core, так и для ORM подхода.
+
+Базовый update(), с одной таблицей и одной изменяемой строкой:
+from sqlalchemy import update
+stmt = (
+    update(user_table)
+    .where(user_table.c.name == "patrick")
+    .values(fullname="Patrick the Star")
+)
+print(stmt)
+
+UPDATE user_account SET fullname=:fullname WHERE user_account.name = :name_1
+
+Изменяемые поля указываются в .values() в виде именованных параметров, обозначающих имена колонок. Чтобы обновить сразу несколько строк, нужно использовать функцию sqlalchemy.bindparam(), применяем её там, куда будем принимать параметры:
+from sqlalchemy import bindparam
+stmt = (
+    update(user_table)
+    .where(user_table.c.name == bindparam("oldname"))
+    .values(name=bindparam("newname"))
+)
+with engine.begin() as conn:
+    conn.execute(
+        stmt,
+        [
+            {"oldname": "jack", "newname": "ed"},
+            {"oldname": "wendy", "newname": "mary"},
+            {"oldname": "jim", "newname": "jake"},
+        ],
+    )
+
+BEGIN (implicit)
+UPDATE user_account SET name=? WHERE user_account.name = ?
+[...] [('ed', 'jack'), ('mary', 'wendy'), ('jake', 'jim')]
+<sqlalchemy.engine.cursor.CursorResult object at 0x...>
+COMMIT
+
+
