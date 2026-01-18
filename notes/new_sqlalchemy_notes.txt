@@ -208,3 +208,104 @@ patrick in session
 True
 
 
+
+Closing a Session
+Закрытие сессии:
+1. Прекращает работу с объектом Connection, отменяет все незавершенные транзакции
+2. Удаляет из сессии все объекты, они переходят в состояние detached, поскольку больше не имеют связи с объектом сессии.
+Как говорит документация - лучше избегать взаимодействия с detached объектами, в крайнем случае, если необходимо, устанавливать для сессии флаг Session.expire_on_commit = False.
+
+
+
+
+
+Working with ORM Related Objects
+
+Тут будет в основном про relationships.
+Итак, допустим мы имеем объект User
+u1 = User(name='фелини', fullname='фелини бабински')
+
+и некой Address:
+a1 = Address(email_address='babinski@yahoo.com')
+
+используя relationship, созданный на этапе построения ORM классов, как отдельный mapped атрибут, мы можем связать эти два объекта так:
+u1.addresses.append(a1)
+
+
+И теперь два объекта взаимосвязаны, к обоим можно получить доступ через другой
+address = u1.addresses[0]
+user = a1.user
+
+
+Однако, пока объекты не добавлены в сессию, они висят в состоянии transient.
+При добавлении в сессию "главного" объекта User (u1), будут добавлены также и связанные с ним посредством relationship объекты:
+session.add(u1)
+u1 in session
+True
+a1 in session
+True
+
+
+Такое поведение называется save-update cascade.
+
+
+
+Чтобы выполнить джойн двух таблиц с помощью relationship, можно указать relationship атрибут внутри метода .join(), он будет одновременно указывать на таблицу с которой делается джойн, и в то же время из него подхватится условие ON.
+print(select(Address.email_address).select_from(User).join(User.addresses))
+
+SELECT address.email_address
+FROM user_account JOIN address ON user_account.id = address.user_id
+
+
+.join() и .join_from() будут использовать relationship атрибуты только в случае если они явно переданы в качестве аргумента.
+
+
+
+В документации есть отдельный раздел посвященный "SQL generation helpers" используемых вместе с relationship, в основном для построения условия WHERE.
+
+
+
+
+
+Loader strategies.
+При загрузке из бд в память строки в виде объекта ORM класса, если у такового имелись relationship, а у этих связанных объектов так же могут быть свои relationship, очевидно, что при стандартном поведении lazy loading подгрузка таких объектов может закончиться формированием десятков отдельных запросов, что негативно скажется на производительности приложения. Поэтому в SQLAlchemy предусмотрена возможность конфигурировать поведение объектов связанных между собой с помощью relationship при загрузке.
+Стоит отметить что дефолтное поведение lazy loading вообще несовместимо с asyncio.
+Для того, чтобы эффективно работать со стратегими загрузки отношений, нужно покрыть обращения к БД тестами, включить echoing и смотреть за выполняемыми запросами. Если SQLAlchemy формирует слишком много SELECT запросов, вероятно может помочь смена стратегии загрузки отношений.
+
+
+Loader strategies представляют из себя объекты, которые можно присоединять к SELECT запросам с помощью Select.options():
+u1 = select(User).options(selectinload(User.adresses))
+
+
+Либо указывать стратегию загрузки по умолчанию прямо в relationship:
+from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import relationship
+
+
+class User(Base):
+    __tablename__ = "user_account"
+
+    addresses: Mapped[List["Address"]] = relationship(
+        back_populates="user", lazy="selectin"
+    )
+
+
+Далее доступные варианты стратегий
+
+Select IN loading
+При построении запроса в котором выбираем объекты User, и его выполнении с помощью session.execute() в действительности вместо одного запроса будет выполнено два, второй подхватит связанные объекты Address для уже загруженных User:
+from sqlalchemy.orm import selectinload
+stmt = select(User).options(selectinload(User.addresses)).order_by(User.id)
+for row in session.execute(stmt):
+    print(
+        f"{row.User.name}  ({', '.join(a.email_address for a in row.User.addresses)})"
+    )
+
+SELECT user_account.id, user_account.name, user_account.fullname
+FROM user_account ORDER BY user_account.id
+[...] ()
+SELECT address.user_id AS address_user_id, address.id AS address_id,
+address.email_address AS address_email_address
+FROM address
+WHERE address.user_id IN (?, ?, ?, ?, ?, ?)
+[...] (1, 2, 3, 4, 5, 6)
