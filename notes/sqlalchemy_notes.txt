@@ -23,7 +23,7 @@ Use 00_session.py for reference.
 3. Working with Database Metadata
 At first, let's talk about the Core approach for tables creation process.
 
-Each declared table is stored in MetaData object in a dictionary-like fashion. MetaData is somewhat a parent container for tables, it has several methods allowing to perform operations like CREATE or DROP on all the tables it contains. Those two specifically are:
+Each declared table is stored in MetaData object in a dictionary-like fashion. MetaData is somewhat a parent container for tables, it has several methods allowing it to perform operations like CREATE or DROP on all the tables it contains. Those two specifically are:
 
 metadata_obj = MetaData()
 metadata_obj.create_all()
@@ -40,7 +40,7 @@ Then, the ORM approach does the same things in a different way.
 Actually, just take a look at 02_table_orm.py
 
 
-Существует несколько способов из уже созданной в базе данных таблицы получить ORM mapped класс, с помощью приёма называемого reflection.
+Существует несколько способов из уже созданной в базе данных таблицы получить объект класса Table, с помощью приёма называемого table reflection.
 Простейший способ в рамках core подхода сгенерировать объект метаданных и на его основе Table:
 
 engine = create_engine(conn_string)
@@ -91,7 +91,7 @@ session.scalars(select(User))
 По аналогии с тем, как обычный текст может быть вставлен в SELECT в SQL, того же можно добиться в SQLAlchemy, используя text() из пакета SQLAlchemy:
 select_stmt = select(text('Габибов Феликс'), user_table.c.name)
 
-Существует так же аналогичный метод .literal_column("'some text'") к которому потом можно применить .label() и обращаться как к отдельной колонке в result.
+Существует так же аналогичная функция literal_column("'some text'") к которой потом можно применить .label() и обращаться как к отдельной колонке в result.
 
 
 В .where() доступны операторы or_() и and_(). В случае где нужен and можно также просто перечислить условия через запятую. Не думаю, что это прямо важно, но SQLAchemy в SQL инструкциях, в частности в WHERE не ставит скобки, там где это не нужно, полагаясь на приоритет операторов.
@@ -352,3 +352,33 @@ UPDATE user_account SET name=? WHERE user_account.name = ?
 COMMIT
 
 
+Можно использовать в связке с correlated subquery():
+scalar_subq = (
+    select(address_table.c.email_address)
+    .where(address_table.c.user_id == user_table.c.id)
+    .order_by(address_table.c.id)
+    .limit(1)
+    .scalar_subquery()
+)
+update_stmt = update(user_table).values(fullname=scalar_subq)
+print(update_stmt)
+
+
+UPDATE user_account SET fullname=(SELECT address.email_address
+FROM address
+WHERE address.user_id = user_account.id ORDER BY address.id
+LIMIT :param_1)
+
+
+
+UPDATE нескольких таблиц одновременно - фича mySQL, в других популярных СУБД такая операция не предусмотрена.
+Однако, в PostgreSQL, MSSQL и mySQL есть синтаксис для апдейта одной таблицы, используя другую для фильтрации:
+update_stmt = (
+    update(user_table)
+    .where(user_table.c.id == address_table.c.user_id)
+    .where(address_table.c.email_address == "patrick@aol.com")
+    .values(fullname="Pat")
+)
+print(update_stmt)
+
+Пока не разобрался до конца с апдейтом строк нескольких таблиц одновременно, но похоже, что в таком формате для этого создаётся запрос, содержащий CROSS JOIN(!!!).

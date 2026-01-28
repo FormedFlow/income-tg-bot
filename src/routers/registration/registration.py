@@ -1,17 +1,18 @@
 from aiogram import Router
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart, Command
-from aiogram.filters.callback_data import CallbackData
+from aiogram.types import Message
+from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery
 from aiogram import F
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.methods.send_message import SendMessage
+from sqlalchemy.ext.asyncio import AsyncSession
 from keyboards.reg_keyboards import name_confirm_kb, RegConfirmCbData
+
+from logic.reg_logic import get_user_by_tg_id, insert_user
 
 
 router = Router()
+
 
 class Registration(StatesGroup):
     waiting_for_name = State()
@@ -25,10 +26,15 @@ async def reset_reg_state(message: Message, state: FSMContext):
 
 
 @router.message(CommandStart())
-async def start(message: Message, state: FSMContext):
-    cur_state = await state.get_state()
-    if cur_state == Registration.registered.state:
-        await message.answer('Браток, ты уже зареган')
+async def start(message: Message, state: FSMContext, session: AsyncSession):
+    try:
+        print(f'BOT ID = {message.bot.id}, USER ID = {message.from_user.id}')
+        user = await get_user_by_tg_id(message.from_user.id, session)
+        print(user)
+    except Exception as e:
+        print('Exception is thrown while fetching user from db: {e.value}')
+    if user:
+        await message.answer('Браток ты уже зареган!')
         return None
     await message.answer('Привет!')
     await reset_reg_state(message, state)
@@ -54,11 +60,20 @@ async def deny_name(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(RegConfirmCbData.filter(F.confirm == True), Registration.waiting_for_name_confirm)
-async def accept_name(callback: CallbackQuery, state: FSMContext):
+async def accept_name(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
     name = data.get('name')
+    try:
+        print(f'USER ID = {callback.from_user.id}')
+        user = await insert_user(session, callback.from_user.id, name)
+        print(f'user = {user}')
+    except Exception as e:
+        print(f'Exception is thrown while inserting user: {e}')
+    print('##########'*5)
+    # print(f'user = {user}')
     await callback.answer()
-    await state.set_state(Registration.registered)
+    # await state.set_state(Registration.registered)
+    await state.clear()
     await callback.message.answer(text=f'Ну чтож, {name}, продолжим')
  
 

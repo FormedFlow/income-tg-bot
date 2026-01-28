@@ -31,3 +31,7 @@ with Session(engine) as session:
 
     print("#"*20)
     print(stmt_2)
+
+    print("#"*20)
+
+    

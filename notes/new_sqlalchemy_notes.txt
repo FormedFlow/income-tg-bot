@@ -309,3 +309,29 @@ address.email_address AS address_email_address
 FROM address
 WHERE address.user_id IN (?, ?, ?, ?, ?, ?)
 [...] (1, 2, 3, 4, 5, 6)
+
+
+
+joined load
+sqlalchemy.orm.joinedload подгружает связанные отношениями объекты с помощью запросов с join.
+Это в свою очередь может приводить к нежелательному дублированию строк резльтирующей выборки, в случае если у записей "главной" таблицы есть большое количество записей в "подчиненной" таблице.
+from sqlalchemy.orm import joinedload
+stmt = (
+    select(Address)
+    .options(joinedload(Address.user, innerjoin=True))
+    .order_by(Address.id)
+)
+for row in session.execute(stmt):
+    print(f"{row.Address.email_address} {row.Address.user.name}")
+
+
+
+Explicit join + eager load
+...
+
+
+
+Raiseload
+Своего рода заглушка главным образом предназначенная для отслеживания проблемы N+1, выбрасывающая исключение sqlalchemy.exc.InvalidRequestError при попытке ленивой загрузки relationship объектов или коллекций.
+Используется путём указания relationship.lazy='raise_on_sql'. Вынуждает при использовании select запросов направленных на получение объектов имеющих relationship явно использовать другие стратегии их загрузки.
+lazy='raise_on_sql' пытается исключать лишнюю работу там где это возможно. Скажем, если есть select() запрос выбирающий объекты Address, и встречается Address.user, ещё не загруженный с помощью SQL, но уже имеющийся в сессии, то он возьмётся из сессии без повторной загрузки.

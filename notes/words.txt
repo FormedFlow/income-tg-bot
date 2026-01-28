@@ -10,6 +10,6 @@ implied - подразумеваемый. not directly stated but understood fro
 intricate - сложный, запутанный. having many small details
 memoization - caching the results of expensive or frequent database queries to avoid re-executing them
 persist - continue to exist without interruption
-transient - (in terms of SQL) a new object created within a Session, that does not have database identity and is not associated with a Session yet. When the object is added to a Session, it state changes to pending.
+transient - (in terms of SQL) a new ORM object, that does not have database identity and is not associated with a Session yet. When the object is added to a Session, it state changes to pending.
 tedium - скука, однообразие. Quality of being repetetive and dull.
 redundant - избыточный, лишний

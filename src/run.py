@@ -1,14 +1,20 @@
 import asyncio
 import logging
 from routers import router as main_router
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
-from config import settings
+from core.config import base_settings
+
+from middlewares.middlewares import DBSessionMiddleware
+from core.database import async_seshmaker
 
 
-bot = Bot(token=settings.bot_token)
+bot = Bot(token=base_settings.bot_token)
 dp = Dispatcher()
+
+dp.message.middleware(DBSessionMiddleware(async_seshmaker))
+dp.callback_query(DBSessionMiddleware(async_seshmaker))
 
 dp.include_router(main_router)
 
@@ -27,6 +33,10 @@ async def main():
 @dp.message(Command('help'))
 async def handle_help(message: Message):
     await message.answer("I'm just an echo bot")
+
+@dp.message(Command('test'))
+async def test_user_id(message: Message):
+    await message.answer(str(message.from_user.id))
 
 
 if __name__ == '__main__':
