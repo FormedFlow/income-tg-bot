@@ -1,20 +1,27 @@
 import asyncio
 import logging
+import locale
 from routers import router as main_router
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
-from core.config import base_settings
 
-from middlewares.middlewares import DBSessionMiddleware
+from core.config import base_settings
+from middlewares.middlewares import DBSessionMiddleware, UserMiddleware
 from core.database import async_seshmaker
 
 
+locale.setlocale(locale.LC_TIME, 'Russian')
 bot = Bot(token=base_settings.bot_token)
 dp = Dispatcher()
 
-dp.message.middleware(DBSessionMiddleware(async_seshmaker))
-dp.callback_query(DBSessionMiddleware(async_seshmaker))
+db_session_middleware = DBSessionMiddleware(async_seshmaker)
+user_middleware = UserMiddleware(async_seshmaker)
+
+dp.message.middleware(db_session_middleware)
+dp.callback_query.middleware(db_session_middleware)
+dp.message.middleware(user_middleware)
+dp.callback_query.middleware(user_middleware)
 
 dp.include_router(main_router)
 

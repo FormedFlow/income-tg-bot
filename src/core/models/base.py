@@ -1,7 +1,8 @@
 from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, String, Numeric, BigInteger
+from sqlalchemy import ForeignKey, String, Numeric, BigInteger, Integer
 from sqlalchemy import func
+from sqlalchemy import Table, Column
 from decimal import Decimal
 from sqlalchemy import Enum
 import enum
@@ -18,6 +19,15 @@ class RecurringRate(enum.Enum):
     YEAR = 'year'
 
 
+user_category = Table(
+    'user_category',
+    Base.metadata,
+    Column('user_category_id', Integer, primary_key=True, autoincrement=True),
+    Column('user_id', ForeignKey('user.user_id', ondelete='RESTRICT')),
+    Column('category_id', ForeignKey('category.category_id', ondelete='RESTRICT'))
+)
+
+
 class User(Base):
     __tablename__ = 'user'
 
@@ -27,9 +37,12 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
     is_admin: Mapped[bool] = mapped_column(default=False)
+    default_currency_id: Mapped[int] = mapped_column(ForeignKey("currency.currency_id"), nullable=True)
+    display_currency_id: Mapped[int] = mapped_column(ForeignKey("currency.currency_id"), nullable=True)
 
     transactions: Mapped['Transaction'] = relationship(back_populates='user')
     recurring_transactions: Mapped['RecurringTransaction'] = relationship(back_populates='user')
+    categories: Mapped['Category'] = relationship(secondary='user_category')
 
 
 class Category(Base):
@@ -37,8 +50,11 @@ class Category(Base):
 
     category_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(45), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(5), default=None, nullable=True)
+    is_income: Mapped[bool] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
 
     # не вижу пока какого-то дельного применения этим отношениям
     # transactions: Mapped['Transaction'] = relationship(back_populates='category', cascade='all, delete, delete-orphan')
@@ -51,6 +67,8 @@ class Currency(Base):
     currency_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(45), nullable=False)
     code: Mapped[str] = mapped_column(String(10))
+    symbol: Mapped[str] = mapped_column(String(10))
+    display_precision: Mapped[int] = mapped_column()
 
 
 class Transaction(Base):
@@ -59,21 +77,24 @@ class Transaction(Base):
     transaction_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id", ondelete='RESTRICT'), nullable=False)
     category_id: Mapped[int] = mapped_column(ForeignKey("category.category_id", ondelete='RESTRICT'), nullable=False)
-    currency_id: Mapped[int] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'))
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'), nullable=False)
+    converted_currency_id: Mapped[int] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'), nullable=True)
     date: Mapped[datetime] = mapped_column(nullable=False)
     is_income: Mapped[bool] = mapped_column(default=False)
+    message: Mapped[str] = mapped_column(String(45), default=None, nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=False)
-    amount_converted_first: Mapped[Decimal] = mapped_column(Numeric(22, 10))
-    amount_converted_current: Mapped[Decimal] = mapped_column(Numeric(22, 10))
-    exchange_rate_first: Mapped[Decimal] = mapped_column(Numeric(24, 12))
-    exchange_rate_current: Mapped[Decimal] = mapped_column(Numeric(24, 12))
-    rate_source_first: Mapped[str] = mapped_column(String(45))
-    rate_source_current: Mapped[str] = mapped_column(String(45))
-    last_recalculated_at: Mapped[datetime] = mapped_column(default=None)
+    amount_converted_first: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=True)
+    amount_converted_current: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=True)
+    exchange_rate_first: Mapped[Decimal] = mapped_column(Numeric(24, 12), nullable=True)
+    exchange_rate_current: Mapped[Decimal] = mapped_column(Numeric(24, 12), nullable=True)
+    rate_source_first: Mapped[str] = mapped_column(String(45), nullable=True)
+    rate_source_current: Mapped[str] = mapped_column(String(45), nullable=True)
+    last_recalculated_at: Mapped[datetime] = mapped_column(default=None, nullable=True)
 
     user: Mapped['User'] = relationship(back_populates='transactions')
     category: Mapped['Category'] = relationship()
-    currency: Mapped['Currency'] = relationship()
+    og_currency: Mapped['Currency'] = relationship(lazy='selectin', foreign_keys="Transaction.currency_id")
+    re_currency: Mapped['Currency'] = relationship(lazy='selectin', foreign_keys="Transaction.converted_currency_id")
 
 
 class RecurringTransaction(Base):
@@ -84,7 +105,7 @@ class RecurringTransaction(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey('category.category_id', ondelete='RESTRICT'), nullable=False)
     date_added_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     amount: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=False)
-    currency: Mapped[int] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'), nullable=False)
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'), nullable=False)
     amount_converted_first: Mapped[Decimal] = mapped_column(Numeric(22, 10))
     amount_converted_current: Mapped[Decimal] = mapped_column(Numeric(22, 10))
     exchange_rate: Mapped[Decimal] = mapped_column(Numeric(24, 12))

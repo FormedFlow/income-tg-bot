@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from keyboards.reg_keyboards import name_confirm_kb, RegConfirmCbData
 
-from logic.reg_logic import get_user_by_tg_id, insert_user
+from services.registration import get_user_by_tg_id, insert_user
 
 
 router = Router()

@@ -1,0 +1,7 @@
+Field,Type,Null,Key,Default,Extra
+category_id,int,NO,PRI,NULL,auto_increment
+name,varchar(45),NO,,NULL,
+created_at,datetime,NO,,now(),DEFAULT_GENERATED
+updated_at,datetime,NO,,now(),DEFAULT_GENERATED
+emoji,varchar(5),YES,,NULL,
+is_income,tinyint(1),NO,,NULL,

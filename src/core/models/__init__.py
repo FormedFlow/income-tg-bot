@@ -1,4 +1,4 @@
-from .base import Base, User, Category, Transaction, Currency, RecurringTransaction
+from .base import Base, User, Category, Transaction, Currency, RecurringTransaction, user_category
 
 __all__ = [
     'Base',
@@ -6,5 +6,6 @@ __all__ = [
     'Category',
     'Transaction',
     'Currency',
-    'RecurringTransaction'
+    'RecurringTransaction',
+    'user_category'
 ]
