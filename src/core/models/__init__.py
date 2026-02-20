@@ -1,4 +1,5 @@
 from .base import Base, User, Category, Transaction, Currency, RecurringTransaction, user_category
+from .base import ExchangeRate
 
 __all__ = [
     'Base',
@@ -7,5 +8,6 @@ __all__ = [
     'Transaction',
     'Currency',
     'RecurringTransaction',
-    'user_category'
+    'ExchangeRate',
+    'user_category',
 ]

@@ -1,11 +1,14 @@
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, String, Numeric, BigInteger, Integer
+from sqlalchemy import ForeignKey, String, Numeric, BigInteger, Integer, Date
 from sqlalchemy import func
 from sqlalchemy import Table, Column
 from decimal import Decimal
 from sqlalchemy import Enum
+from sqlalchemy.ext.asyncio import AsyncSession
 import enum
+
+# from services.exchange_rates import get_exchange_rate
 
 
 class Base(DeclarativeBase):
@@ -85,16 +88,38 @@ class Transaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=False)
     amount_converted_first: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=True)
     amount_converted_current: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=True)
-    exchange_rate_first: Mapped[Decimal] = mapped_column(Numeric(24, 12), nullable=True)
-    exchange_rate_current: Mapped[Decimal] = mapped_column(Numeric(24, 12), nullable=True)
-    rate_source_first: Mapped[str] = mapped_column(String(45), nullable=True)
-    rate_source_current: Mapped[str] = mapped_column(String(45), nullable=True)
+    exchange_rate_first_id: Mapped[int] = mapped_column(ForeignKey("exchange_rate.rate_id", ondelete='RESTRICT'), nullable=True)
+    exchange_rate_current_id: Mapped[int] = mapped_column(ForeignKey("exchange_rate.rate_id", ondelete='RESTRICT'), nullable=True)
     last_recalculated_at: Mapped[datetime] = mapped_column(default=None, nullable=True)
 
     user: Mapped['User'] = relationship(back_populates='transactions')
-    category: Mapped['Category'] = relationship()
+    category: Mapped['Category'] = relationship(lazy='selectin')
     og_currency: Mapped['Currency'] = relationship(lazy='selectin', foreign_keys="Transaction.currency_id")
     re_currency: Mapped['Currency'] = relationship(lazy='selectin', foreign_keys="Transaction.converted_currency_id")
+
+
+    def __str__(self):
+        return f'Transaction instance, transaction id={self.transaction_id}, amount={self.amount}, date={self.date}'
+
+
+    async def convert_to(
+            self,
+            session: AsyncSession,
+            currency: Currency
+    ):
+        # rate_date = date.today()
+        # rate = None
+        # while rate is None:
+        #     exchane_rate = await get_exchange_rate(
+        #         session,
+        #         self.currency_id, 
+        #         currency.currency_id, 
+        #         rate_date
+        #     )
+        #     rate_date = rate_date.replace(day=date.today().day - 1)
+        # exchange_rate = rate.exchange_rate
+        # self.amount_converted
+        pass
 
 
 class RecurringTransaction(Base):
@@ -117,3 +142,14 @@ class RecurringTransaction(Base):
     user: Mapped['User'] = relationship()
     category: Mapped['Category'] = relationship()
 
+
+class ExchangeRate(Base):
+    __tablename__ = 'exchange_rate'
+
+    rate_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, nullable=False)
+    base_currency: Mapped['Currency'] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'), nullable=True)
+    change_currency: Mapped['Currency'] = mapped_column(ForeignKey("currency.currency_id", ondelete='RESTRICT'), nullable=True)
+    date: Mapped[date] = mapped_column(Date)
+    exchange_rate: Mapped[Decimal] = mapped_column(Numeric(24, 12), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(default=datetime.now(), nullable=True)
+    

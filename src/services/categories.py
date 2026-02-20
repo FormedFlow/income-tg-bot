@@ -36,7 +36,8 @@ async def get_user_transactions_currency_by_caregory_id(
     return (transactions, total_transactions)
 
 
-def format_category_transactions(num: int, entry: Transaction):
+def format_category_transactions(num: int, 
+                                 entry: Transaction):
     dt, amount = entry.date, entry.amount
     amount_emoji = '📈' if entry.is_income else '📉'
     clock, calendar = '🕐', '🗓'

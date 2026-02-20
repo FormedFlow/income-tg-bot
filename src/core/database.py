@@ -4,7 +4,7 @@ from core.config import base_settings
 import asyncio
 
 
-engine = create_async_engine(base_settings.db_url_base_async,
+engine = create_async_engine(base_settings.db_url_test,
                              echo=True)
 async_seshmaker = async_sessionmaker(engine, expire_on_commit=False)
 
