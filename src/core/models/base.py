@@ -152,4 +152,3 @@ class ExchangeRate(Base):
     date: Mapped[date] = mapped_column(Date)
     exchange_rate: Mapped[Decimal] = mapped_column(Numeric(24, 12), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(default=datetime.now(), nullable=True)
-    
